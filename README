@@ -28,28 +28,3 @@ USAGE:
 
 =================================================================================================
 
-                            Version Record
-  This section contains version comments describing changes made to the module.
-  Notice that  changes are listed in reverse chronological order.
-
-
-Version                            When          Modification
---------------------               --------      ------------------------------------------------
-Fibocom-dial_Linux_Tool_V2.0.7    2021.07.08     1.Solved the problem of PIN code setting
-
-Fibocom-dial_Linux_Tool_V2.0.6    2021.06.09     1.Solved the problem of dual stack dial not getting IPv6 address
-
-Fibocom-dial_Linux_Tool_V2.0.5    2021.03.16     1.To solve the Zyxel customer needs, increased
-                                                 tool and driver interface, the test driver is
-												 customer customized.
-
-Fibocom-dial_Linux_Tool_V2.0.4    2021.02.25     1.Add function description for parameter "-g"
-                                                 2.Change "iFace_ID" to dynamic configuration
-
-Fibocom-dial_Linux_Tool_V2.0.3    2021.01.27     1.PCIE multiplexing adds default routing
-                                                 2.Compatible with QMI_WWAN driver
-
-Fibocom-dial_Linux_Tool_V2.0.2    2020.12.04     Optimize APN length setting
-
-Fibocom-dial_Linux_Tool_V2.0.1    2020.11.19     Integration of USB and PCI function tools
-=================================================================================================
