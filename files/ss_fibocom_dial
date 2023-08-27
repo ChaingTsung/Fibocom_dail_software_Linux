@@ -1,0 +1,22 @@
+#!/bin/sh /etc/rc.common
+
+SATRT=99
+dev="/dev/mhi_QMI0"
+Log="/var/fibo-dail.txt"
+Program="/usr/bin/fibocom-dial"
+APN="5gscuiot"
+
+start(){
+
+	[ -f "$Log" ] && echo "$Log exists" || touch "$Log"
+	$Program -s $APN -d $dev -f $Log &
+}
+
+stop(){
+	/usr/bin/killall fibocom-dial
+}
+
+restart(){
+	stop
+	start
+}

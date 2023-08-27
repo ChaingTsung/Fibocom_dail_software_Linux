@@ -20,6 +20,7 @@ static int GobiNetSendQMI(PQCQMIMSG pRequest)
 {
     int ret, fd;
 
+    static int send_count = 0;
     fd = qmiclientId[pRequest->QMIHdr.QMIType];
 
     if (fd <= 0) {
@@ -29,16 +30,27 @@ static int GobiNetSendQMI(PQCQMIMSG pRequest)
     }
 
     // Always ready to write
+re_write:
     if (1 == 1) {
-	ssize_t nwrites =
-	    le16_to_cpu(pRequest->QMIHdr.Length) + 1 - sizeof(QCQMI_HDR);
-	ret = write(fd, &pRequest->MUXMsg, nwrites);
-	if (ret == nwrites) {
-	    ret = 0;
-	} else {
-	    dbg_time("%s write=%d, errno: %d (%s)", __func__, ret, errno,
-		     strerror(errno));
-	}
+        ssize_t nwrites =
+            le16_to_cpu(pRequest->QMIHdr.Length) + 1 - sizeof(QCQMI_HDR);
+        ret = write(fd, &pRequest->MUXMsg, nwrites);
+        if (ret == nwrites)
+        {
+            ret = 0;
+            send_count = 0;
+        }
+        else
+        {
+            send_count++;
+            dbg_time("%s write=%d, errno: %d (%s) send_count %d", __func__, ret, errno, strerror(errno), send_count);
+            if (send_count < 3)
+            {
+                sleep(1);
+                goto re_write;
+            }
+        }
+
     } else {
 	dbg_time("%s poll=%d, errno: %d (%s)", __func__, ret, errno,
 		 strerror(errno));
@@ -115,6 +127,7 @@ static void *GobiNetThread(void *pData)
     PROFILE_T *profile = (PROFILE_T *)pData;
     const char *qcqmi = (const char *)profile->qmichannel;
     int wait_for_request_quit = 0;
+    dbg_time("%s %d", __func__, __LINE__);
     if (profile->ipv4_flag)
 	    qmiclientId[QMUX_TYPE_WDS] = GobiNetGetClientID(qcqmi, QMUX_TYPE_WDS);
     if (profile->ipv6_flag)
@@ -125,13 +138,19 @@ static void *GobiNetThread(void *pData)
     // qmiclientId[QMUX_TYPE_WDS_ADMIN] =
 //	GobiNetGetClientID(qcqmi, QMUX_TYPE_WDS_ADMIN);
 
-    if ((qmiclientId[QMUX_TYPE_WDS] == 0) && (qmiclientId[QMUX_TYPE_WDS_IPV6] == 0)) /*|| (clientWDA == -1)*/ {
-	GobiNetDeInit();
-	dbg_time("%s Failed to open %s, errno: %d (%s)", __func__, qcqmi, errno,
-		 strerror(errno));
-	qmidevice_send_event_to_main(RIL_INDICATE_DEVICE_DISCONNECTED);
-	pthread_exit(NULL);
-	return NULL;
+    //if ((qmiclientId[QMUX_TYPE_WDS] == 0) && (qmiclientId[QMUX_TYPE_WDS_IPV6] == 0)) /*|| (clientWDA == -1)*/ {
+
+    if ((qmiclientId[QMUX_TYPE_DMS] == 0) ||
+        (qmiclientId[QMUX_TYPE_NAS] == 0) ||
+        (qmiclientId[QMUX_TYPE_UIM] == 0) ||
+        (profile->ipv4_flag ? ((qmiclientId[QMUX_TYPE_WDS] == 0) ? 1 : 0):0)||
+        (profile->ipv6_flag ? ((qmiclientId[QMUX_TYPE_WDS_IPV6] == 0) ? 1 : 0):0))
+    {
+        GobiNetDeInit();
+        dbg_time("%s Failed to open %s, errno: %d (%s)", __func__, qcqmi, errno,strerror(errno));
+        qmidevice_send_event_to_main(RIL_INDICATE_DEVICE_DISCONNECTED);
+        pthread_exit(NULL);
+        return NULL;
     }
 
     qmidevice_send_event_to_main(RIL_INDICATE_DEVICE_CONNECTED);

@@ -259,9 +259,38 @@ int fibo_qmap_mode_detect(PROFILE_T *profile)
         }
     }
 
-    if (!access(pl->filename, R_OK)) {
-    n = fibo_fread(pl->filename, buf, sizeof(buf));
-    if (n > 0) {
+    if(!access(pl->filename, R_OK))
+    {
+        n = fibo_fread(pl->filename, buf, sizeof(buf));
+        if(n > 0)
+        {
+            profile->qmap_mode = atoi(buf);
+            if(profile->qmap_mode >= 1 && qmidev_is_pciemhi(profile->qmichannel))
+            {
+                profile->muxid =
+                    profile->pdp + 0x80;
+                sprintf(qmap_netcard, "%s.%d", profile->usbnet_adapter,profile->pdp);
+                profile->qmapnet_adapter = strdup(qmap_netcard);
+            }
+            if(qmidev_is_gobinet(profile->qmichannel) || qmidev_is_qmiwwan(profile->qmichannel))
+            {
+                if(profile->qmap_mode > 1)
+                {
+                    profile->muxid =
+                        profile->pdp + 0x80;
+                    sprintf(qmap_netcard, "%s.%d", profile->usbnet_adapter,profile->pdp);
+                    profile->qmapnet_adapter = strdup(qmap_netcard);
+                }
+                if(profile->qmap_mode == 1)
+                {
+                    profile->muxid = 0x81;
+                    profile->qmapnet_adapter = strdup(profile->usbnet_adapter);
+                }
+            }
+        }
+
+
+    if (0) {
         profile->qmap_mode = atoi(buf);
 
         if (profile->qmap_mode > 1 && qmidev_is_gobinet(profile->qmichannel)) {

@@ -28,6 +28,8 @@ typedef unsigned int uint32_t;
 #define SYSCHECK(c) do{if((c)<0) {dprintf("%s %d error: '%s' (code: %d)\n", __func__, __LINE__, strerror(errno), errno); return -1;}}while(0)
 #define cfmakenoblock(fd) do{fcntl(fd, F_SETFL, fcntl(fd,F_GETFL) | O_NONBLOCK);}while(0)
 
+#define qmidev_is_pciemhi(_qmichannel) (strncmp(_qmichannel, "/dev/mhi_", strlen("/dev/mhi_")) == 0)
+
 typedef struct _QCQMI_HDR
 {
    uint8_t  IFType;
@@ -768,7 +770,7 @@ static PQCQMUX_TLV qmi_find_tlv (PQCQMIMSG pQMI, uint8_t TLVType) {
    return NULL;
 }
 
-static int qmi_proxy_init(void) {
+static int qmi_proxy_init(char *qmi_device, char* getidproduct) {
     unsigned i;
     int ret;
     QCQMIMSG _QMI;
@@ -859,9 +861,30 @@ static int qmi_proxy_init(void) {
     }
     free(pRsp);
 
-    rx_urb_size = 32*1024; //must same as rx_urb_size defined in GobiNet&qmi_wwan driver //SDX24&SDX55 support 32KB
-    ep_type = 0x3;
-    iface_id = 0x04;
+    if(qmidev_is_pciemhi(qmi_device))
+    {
+        rx_urb_size = 32*1024; //must same as rx_urb_size defined in GobiNet&qmi_wwan driver //SDX24&SDX55 support 32KB
+        ep_type = 0x03;
+    }
+    else
+    {
+        rx_urb_size = 4*1024; //must same as rx_urb_size defined in GobiNet&qmi_wwan driver //SDX24&SDX55 support 32KB
+        ep_type = 0x02;
+    }
+
+    printf("getidproduct=%s\n", getidproduct);
+    if(!strncasecmp(getidproduct, "0104", 4)|| !strncasecmp(getidproduct, "1001", 4) || !strncasecmp(getidproduct, "9025", 4))
+        iface_id = 0x04;
+    else if(!strncasecmp(getidproduct, "0109", 4) || !strncasecmp(getidproduct, "1000", 4))
+        iface_id = 0x02;
+    else if(!strncasecmp(getidproduct, "0113", 4))
+        iface_id = 0x00;
+
+    /*begin added by minchao.zhao@fibocom.com for mantis 91283 on 2021-09-27*/
+    if(qmidev_is_pciemhi(qmi_device))
+        iface_id = 0x04; //mhi_QMI0 enumeration arrangement
+    /*end added by minchao.zhao@fibocom.com for mantis 91283 on 2021-09-27*/
+    printf("iface_id=%d\n", iface_id);
 
     pQMI->QMIHdr.IFType   = USB_CTL_MSG_TYPE_QMI;
     pQMI->QMIHdr.CtlFlags = 0x00;
@@ -893,7 +916,14 @@ static int qmi_proxy_init(void) {
 //Maximum number of datagrams in a single aggregated packet on downlink
     pQMI->MUXMsg.SetDataFormatReq.DownlinkDataAggregationMaxDatagramsTlv.TLVType = 0x15; 
     pQMI->MUXMsg.SetDataFormatReq.DownlinkDataAggregationMaxDatagramsTlv.TLVLength = cpu_to_le16(4);
-    pQMI->MUXMsg.SetDataFormatReq.DownlinkDataAggregationMaxDatagramsTlv.Value = cpu_to_le32((rx_urb_size>2048)?(rx_urb_size/512):1);
+    if(qmidev_is_pciemhi(qmi_device))
+    {
+        pQMI->MUXMsg.SetDataFormatReq.DownlinkDataAggregationMaxDatagramsTlv.Value = cpu_to_le32((rx_urb_size>2048)?(rx_urb_size/512):1);
+    }
+    else
+    {
+        pQMI->MUXMsg.SetDataFormatReq.DownlinkDataAggregationMaxDatagramsTlv.Value = cpu_to_le32((rx_urb_size>2048)?(rx_urb_size/1024):1);
+    }
 //Maximum size in bytes of a single aggregated packet allowed on downlink
     pQMI->MUXMsg.SetDataFormatReq.DownlinkDataAggregationMaxSizeTlv.TLVType = 0x16; 
     pQMI->MUXMsg.SetDataFormatReq.DownlinkDataAggregationMaxSizeTlv.TLVLength = cpu_to_le16(4);
@@ -957,14 +987,12 @@ static void qmi_start_server(void) {
     qmi_proxy_server_fd = create_local_server("fibo_qmimsg_server");
     printf("%s: qmi_proxy_server_fd = %d\n", __func__, qmi_proxy_server_fd);
     if (qmi_proxy_server_fd == -1) {
-        //dprintf("%s Failed to create %s, errno: %d (%s)\n", __func__, "quectel-qmi-proxy", errno, strerror(errno));
 		dprintf("%s Failed to create %s, errno: %d (%s)\n", __func__, "fibocom-qmi-proxy", errno, strerror(errno));
     }
 }
 
 static void qmi_close_server(void) {
     if (qmi_proxy_server_fd != -1) {
-        //dprintf("%s %s close server\n", __func__, "quectel-qmi-proxy");
 		dprintf("%s %s close server\n", __func__, "fibocom-qmi-proxy");
         close(qmi_proxy_server_fd);
         qmi_proxy_server_fd = -1;
@@ -1106,7 +1134,7 @@ qmi_proxy_loop_exit:
     return NULL;
 }
 
-static void qmidevice_detect(char **device_name) {
+static void qmidevice_detect(char **device_name, char **idproduct) {
     struct dirent* ent = NULL;
     DIR *pDir;
 
@@ -1142,10 +1170,14 @@ static void qmidevice_detect(char **device_name) {
                 close(fd);
             }
 
-            if (strncasecmp(idVendor, "05c6", 4) && strncasecmp(idVendor, "2c7c", 4))
+
+        if (strncasecmp(idVendor, "05c6", 4) && strncasecmp(idVendor, "2cb7", 4) && strncasecmp(idVendor, "1508", 4))
                 continue;
 
-            dprintf("Find %s/%s idVendor=%s idProduct=%s\n", dir, ent->d_name, idVendor, idProduct);
+        dprintf("Find %s/%s idVendor=%s idProduct=%s\n", dir, ent->d_name, idVendor, idProduct);
+
+        if(((!strncasecmp(idVendor, "2cb7", 4)) && (!strncasecmp(idProduct, "0104", 4))) || ((!strncasecmp(idVendor, "1508", 4)) && (!strncasecmp(idProduct, "1001", 4))) || ((!strncasecmp(idVendor, "05c6", 4)) && (!strncasecmp(idProduct, "9025", 4))))
+        {
             snprintf(pl->subdir, sizeof(pl->subdir), "%s/%s:1.4/usbmisc", dir, ent->d_name);
             if (access(pl->subdir, R_OK)) {
                 snprintf(pl->subdir, sizeof(pl->subdir), "%s/%s:1.4/usb", dir, ent->d_name);
@@ -1154,7 +1186,31 @@ static void qmidevice_detect(char **device_name) {
                     continue;
                 }
             }
-            
+        }
+        else if((!strncasecmp(idVendor, "2cb7", 4) && !strncasecmp(idProduct, "0109", 4)) || (!strncasecmp(idVendor, "1508", 4) && !strncasecmp(idProduct, "1000", 4)))
+        {
+            snprintf(pl->subdir, sizeof(pl->subdir), "%s/%s:1.2/usbmisc", dir, ent->d_name);
+            if (access(pl->subdir, R_OK)) {
+                snprintf(pl->subdir, sizeof(pl->subdir), "%s/%s:1.2/usb", dir, ent->d_name);
+                if (access(pl->subdir, R_OK)) {
+                    dprintf("no GobiQMI/usbmic/usb found in %s/%s:1.2\n", dir, ent->d_name);
+                    continue;
+                }
+            }
+        }
+        else if(!strncasecmp(idVendor, "2cb7", 4) && !strncasecmp(idProduct, "0113", 4))
+        {
+            snprintf(pl->subdir, sizeof(pl->subdir), "%s/%s:1.0/usbmisc", dir, ent->d_name);
+            if (access(pl->subdir, R_OK)) {
+                snprintf(pl->subdir, sizeof(pl->subdir), "%s/%s:1.0/usb", dir, ent->d_name);
+                if (access(pl->subdir, R_OK)) {
+                    dprintf("no GobiQMI/usbmic/usb found in %s/%s:1.0\n", dir, ent->d_name);
+                    continue;
+                }
+            }
+        }
+
+        strncpy(idproduct,idProduct, sizeof(idProduct));
             psubDir = opendir(pl->subdir);
             if (pDir == NULL)  {
                 dprintf("Cannot open directory: %s, errno: %d (%s)\n", dir, errno, strerror(errno));
@@ -1194,7 +1250,7 @@ int main(int argc, char *argv[]) {
     int opt;
     char *cdc_wdm = NULL;
     int retry_times = 0;
-
+    char getidproduct[5] = {0};
     optind = 1;
 
     signal(SIGINT, sig_action);
@@ -1214,8 +1270,7 @@ int main(int argc, char *argv[]) {
     }
     
     if (cdc_wdm == NULL)
-        qmidevice_detect(&cdc_wdm);
-
+        qmidevice_detect(&cdc_wdm, &getidproduct);
     if (cdc_wdm == NULL) {
         dprintf("Fail to find any /dev/cdc-wdm device. break\n");
         return -1;
@@ -1247,7 +1302,7 @@ int main(int argc, char *argv[]) {
         /* no qmi_proxy_loop lives, create one */
         pthread_create(&thread_id, NULL, qmi_proxy_loop, NULL);
         /* try to redo init if failed, init function must be successfully */
-        while (qmi_proxy_init() != 0) {
+        while (qmi_proxy_init(cdc_wdm, getidproduct) != 0) {
             if (retry_times < 5) {
                 dprintf("fail to init proxy, try again in 2 seconds.\n");
                 sleep(2);

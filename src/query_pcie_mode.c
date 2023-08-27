@@ -1,6 +1,6 @@
 //2021-03-24 willa.liu@fibocom.com changed begin for support mantis 0071817
 #include "QMIThread.h"
-
+#include "query_pcie_mode.h"
 int speed_arr[] = { B115200, B19200, B9600, B4800, B2400, B1200, B300,//
                     B38400, B19200, B9600, B4800, B2400, B1200, B300,
                   };

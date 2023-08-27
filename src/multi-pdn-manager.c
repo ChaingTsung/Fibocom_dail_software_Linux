@@ -10,7 +10,7 @@
 #include <errno.h>
 //end modified by zhangkaibo get qmap_num process flow. mantis 0048920,0048917  20200605 
 #include "util.h"
-
+#include "query_pcie_mode.h"
 #define MAJOR 1
 #define MINOR 0
 #define REVISION 4
@@ -57,6 +57,16 @@ static int is_pcie_dial()
     return (access("/dev/mhi_QMI0", F_OK) == 0);
 }
 
+static int is_gobinet_dial()
+{
+    return (access("/dev/qcqmi0", F_OK) == 0);
+}
+
+static int is_qmiwwan_dial()
+{
+    return (access("/dev/cdc-wdm0", F_OK) == 0);
+}
+
 static size_t fibo_fread(const char *filename, void *buf, size_t size)
 {
     FILE *fp = fopen(filename, "r");
@@ -93,35 +103,56 @@ int get_qmap_num()
 
     pl = (typeof(pl))malloc(sizeof(*pl));
 
-    snprintf(pl->linkname, sizeof(pl->linkname),
-	     "/sys/class/net/usb0/device/driver");
-    n = readlink(pl->linkname, pl->filename, sizeof(pl->filename));
-    pl->filename[n] = '\0';
-    while (pl->filename[n] != '/') n--;
-
-    snprintf(pl->filename, sizeof(pl->filename), "/sys/class/net/usb0/qmap_num");
-//2021-02-22 kaibo.zhangkaibo@fibocom.com changed begin for support mantis 0071171
-    if (access(pl->filename, F_OK) == 0) {
-        dbg_time("access %s", pl->filename);
-        if (errno != ENOENT) {
-            dbg_time("fail to access %s, errno: %d (%s)", pl->filename, errno,
-                strerror(errno));
-            goto _out;
-        }
-    }
-    else
+    if(is_gobinet_dial())
     {
-    snprintf(pl->filename, sizeof(pl->filename), "/sys/class/net/usb0/qmap_mode");
+        snprintf(pl->linkname, sizeof(pl->linkname),
+    	     "/sys/class/net/usb0/device/driver");
+        n = readlink(pl->linkname, pl->filename, sizeof(pl->filename));
+        pl->filename[n] = '\0';
+        while (pl->filename[n] != '/') n--;
+
+        snprintf(pl->filename, sizeof(pl->filename), "/sys/class/net/usb0/qmap_num");
+    //2021-02-22 kaibo.zhangkaibo@fibocom.com changed begin for support mantis 0071171
         if (access(pl->filename, F_OK) == 0) {
-        dbg_time("access %s", pl->filename);
+            dbg_time("access %s", pl->filename);
             if (errno != ENOENT) {
                 dbg_time("fail to access %s, errno: %d (%s)", pl->filename, errno,
                     strerror(errno));
                 goto _out;
             }
         }
+        else
+        {
+        snprintf(pl->filename, sizeof(pl->filename), "/sys/class/net/usb0/qmap_mode");
+            if (access(pl->filename, F_OK) == 0) {
+            dbg_time("access %s", pl->filename);
+                if (errno != ENOENT) {
+                    dbg_time("fail to access %s, errno: %d (%s)", pl->filename, errno,
+                        strerror(errno));
+                    goto _out;
+                }
+            }
+        }
     }
-//2021-02-22 kaibo.zhangkaibo@fibocom.com changed end for support mantis 0071171
+    if(is_qmiwwan_dial())
+    {
+        snprintf(pl->linkname, sizeof(pl->linkname),
+        "/sys/class/net/wwan0/device/driver");
+        n = readlink(pl->linkname, pl->filename, sizeof(pl->filename));
+        pl->filename[n] = '\0';
+        while (pl->filename[n] != '/') n--;
+
+        snprintf(pl->filename, sizeof(pl->filename), "/sys/class/net/wwan0/qmap_mode");
+        if (access(pl->filename, F_OK) == 0) {
+            dbg_time("access %s", pl->filename);
+                if (errno != ENOENT) {
+                    dbg_time("fail to access %s, errno: %d (%s)", pl->filename, errno,
+                        strerror(errno));
+                    goto _out;
+                }
+            }
+    }
+
     dbg_time("access %s", pl->filename);
 
     if (!access(pl->filename, R_OK)) {
@@ -559,7 +590,7 @@ void modifyProfile(struct profile *profileList)
      * Solve the problem of setting length
      * of apn/username/password, mantis 0062495.
      */
-    printf("profile auth[0-2]:");
+    printf("profile auth[0-3]:");
     f = malloc(sizeof(f));
     fgets(f,sizeof(f),stdin);
 //begin modified by zhangkaibo limit input parameters. mantis 0048965  20200605
@@ -568,7 +599,7 @@ void modifyProfile(struct profile *profileList)
 	dbg_time("invalid input");
 	return;
     }
-    if(tempprofile.auth < 0 || tempprofile.auth > 2){       	
+    if(tempprofile.auth < 0 || tempprofile.auth > 3){       	
 	dbg_time("invalid auth type");
 	return;
     }
@@ -674,14 +705,14 @@ void startConnectCM(struct profile *profileList, bool *connectState)
     char cmd[1024];
     //./fibicom-dial -n -s -s apn user password auth -4 -6
 
-    sprintf(cmd, "-n %d -P %d -s %s %s %s %d", connectIndex, connectProfile,
+    sprintf(cmd, "-n %d -m %d -s %s %s %s %d", connectIndex, connectProfile,
 	    profileList[connectProfile - 1].apn,
 	    profileList[connectProfile - 1].user,
 	    profileList[connectProfile - 1].password,
 	    profileList[connectProfile - 1].auth);
     char *argvCmd[30];
     int index = 0;
-    // DIAL_PROCESS,","-N","4,""-n","2","-P","1","-s","ctnet","","","","-4","-6","-f","temp.txt",NULL;
+    // DIAL_PROCESS,","-N","4,""-n","2","-m","1","-s","ctnet","","","","-4","-6","-f","temp.txt",NULL;
     argvCmd[index] = malloc(256);
     sprintf(argvCmd[index++], "%s", DIAL_PROCESS);
     argvCmd[index] = malloc(5);

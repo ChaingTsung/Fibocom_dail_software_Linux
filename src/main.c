@@ -16,12 +16,12 @@
 #include "QMIThread.h"
 #include "util.h"
 //2021-03-24 willa.liu@fibocom.com changed begin for support mantis 0071817
-//#include "query_pcie_mode.h"
+#include "query_pcie_mode.h"
 //2021-03-24 willa.liu@fibocom.com changed begin for support mantis 0071817
 
 #define MAJOR 2
 #define MINOR 0
-#define REVISION 7
+#define REVISION 10
 /*
  * Generally, we do not modify version info, so several modifications will share
  * the same version code. SUBVERSION is used for customized modification to
@@ -63,9 +63,9 @@ extern const struct qmi_device_ops qmiwwan_qmidev_ops;
 extern const struct qmi_device_ops gobi_qmidev_ops;
 
 //2021-03-24 willa.liu@fibocom.com changed begin for support mantis 0071817
-extern int *speed_arr;
-extern int *name_arr;
-extern int get_private_gateway_debug;
+//extern int *speed_arr;
+//extern int *name_arr;
+//extern int get_private_gateway_debug;
 //2021-03-24 willa.liu@fibocom.com changed end for support mantis 0071817
 
 static int s_link = -1;
@@ -93,7 +93,7 @@ int split_gateway(char *str ,char* split, int index, char *outgateway)
             memcpy(outgateway, pchTmp, strlen(pchTmp));
             break;
         }
-        if(strstr(pchTmp, "+CGCONTRDP") != -1)
+        //if(strstr(pchTmp, "+CGCONTRDP") != -1)
             i++;
         pchTmp = NULL;
     }
@@ -259,19 +259,38 @@ static int check_address(PROFILE_T *now_profile,int ipfamily)
 {
     PROFILE_T new_profile_v;
     PROFILE_T *new_profile = &new_profile_v;
+    static int time_out_count = 0;
+    int ret = 0;
+    #define QMITHREADSENDQMITIMEOUT 110
 
     memcpy(new_profile, now_profile, sizeof(PROFILE_T));
     if(ipfamily == IpFamilyV4)
     {
-        if (requestGetIPAddress(new_profile, 0x04) == 0) {
-        if (new_profile->ipv4.Address != now_profile->ipv4.Address ||
-            debug_qmi) {
-            unsigned char *l = (unsigned char *)&now_profile->ipv4.Address;
-            unsigned char *r = (unsigned char *)&new_profile->ipv4.Address;
-            dbg_time("localIP: %d.%d.%d.%d VS remoteIP: %d.%d.%d.%d", l[3],
-                 l[2], l[1], l[0], r[3], r[2], r[1], r[0]);
+        ret = requestGetIPAddress(new_profile, 0x04);
+        if (ret == 0)
+        {
+            time_out_count = 0;
+            if (new_profile->ipv4.Address != now_profile->ipv4.Address || debug_qmi)
+            {
+                unsigned char *l = (unsigned char *)&now_profile->ipv4.Address;
+                unsigned char *r = (unsigned char *)&new_profile->ipv4.Address;
+                dbg_time("localIP: %d.%d.%d.%d VS remoteIP: %d.%d.%d.%d", l[3],
+                     l[2], l[1], l[0], r[3], r[2], r[1], r[0]);
+            }
+            return (new_profile->ipv4.Address == now_profile->ipv4.Address);
         }
-        return (new_profile->ipv4.Address == now_profile->ipv4.Address);
+        else if (ret == QMITHREADSENDQMITIMEOUT)
+        {
+            time_out_count++;
+            dbg_time("%s %d time_out_count %d\n", __func__, __LINE__, time_out_count);
+            if (time_out_count >= 3)
+            {
+                return 0;
+            }
+            else
+            {
+                return 1;
+            }
         }
     }
     if(ipfamily == IpFamilyV6)
@@ -315,7 +334,7 @@ static int ls_dir(const char *dir,
     }
 
     while ((ent = readdir(pDir)) != NULL) {
-    match_times += match(dir, ent->d_name, argv);
+        match_times += match(dir, ent->d_name, argv);
     }
     closedir(pDir);
 
@@ -688,6 +707,13 @@ static int qmidevice_detect(char **pp_qmichannel, char **pp_usbnet_adapter,PROFI
             indexid = 2;
             profile->interfacenum = 2;
         }
+//2021-09-09 willa.liu@fibocom.com changed start for mantis 0086219
+        else if(!strncasecmp(idProduct, "0113", 4))
+        {
+            indexid = 0;
+            profile->interfacenum = 0;
+        }
+//2021-09-09 willa.liu@fibocom.com changed end for mantis 0086219
         else
         {
             profile->interfacenum = 4;

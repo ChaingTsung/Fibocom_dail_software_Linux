@@ -1,9 +1,10 @@
 #include "QMIThread.h"
+#include "query_pcie_mode.h"
 extern char *strndup(const char *__string, size_t __n);
 
 //2021-03-24 willa.liu@fibocom.com changed begin for support mantis 0071817
-extern int *speed_arr;
-extern int *name_arr;
+//extern int *speed_arr;
+//extern int *name_arr;
 
 PQCQMIMSG pResponse;
 PQMUX_MSG pMUXMsg;
@@ -2255,6 +2256,7 @@ int requestGetIPAddress(PROFILE_T *profile, int curIpFamily)
     int err;
     PQMIWDS_GET_RUNTIME_SETTINGS_TLV_IPV4_ADDR pIpv4Addr;
     PQMIWDS_GET_RUNTIME_SETTINGS_TLV_IPV6_ADDR pIpv6Addr = NULL;
+    PQMIWDS_GET_RUNTIME_SETTINGS_TLV_IPV6_DNS_ADDR pIpv6DNSAddr = NULL;
     PQMIWDS_GET_RUNTIME_SETTINGS_TLV_MTU pMtu;
     IPV4_T *pIpv4 = &profile->ipv4;
     IPV6_T *pIpv6 = &profile->ipv6;
@@ -2310,18 +2312,18 @@ int requestGetIPAddress(PROFILE_T *profile, int curIpFamily)
 	pIpv4->Address = pIpv4Addr->IPV4Address;
     }
 
-    pIpv6Addr = (PQMIWDS_GET_RUNTIME_SETTINGS_TLV_IPV6_ADDR)GetTLV(
+    pIpv6DNSAddr = (PQMIWDS_GET_RUNTIME_SETTINGS_TLV_IPV6_DNS_ADDR)GetTLV(
 	&pResponse->MUXMsg.QMUXMsgHdr,
 	QMIWDS_GET_RUNTIME_SETTINGS_TLV_TYPE_IPV6PRIMARYDNS);
-    if (pIpv6Addr) {
-	memcpy(pIpv6->DnsPrimary, pIpv6Addr->IPV6Address, 16);
+    if (pIpv6DNSAddr) {
+	memcpy(pIpv6->DnsPrimary, pIpv6DNSAddr->IPV6Address, 16);
     }
 
-    pIpv6Addr = (PQMIWDS_GET_RUNTIME_SETTINGS_TLV_IPV6_ADDR)GetTLV(
+    pIpv6DNSAddr = (PQMIWDS_GET_RUNTIME_SETTINGS_TLV_IPV6_DNS_ADDR)GetTLV(
 	&pResponse->MUXMsg.QMUXMsgHdr,
 	QMIWDS_GET_RUNTIME_SETTINGS_TLV_TYPE_IPV6SECONDARYDNS);
-    if (pIpv6Addr) {
-	memcpy(pIpv6->DnsSecondary, pIpv6Addr->IPV6Address, 16);
+    if (pIpv6DNSAddr) {
+	memcpy(pIpv6->DnsSecondary, pIpv6DNSAddr->IPV6Address, 16);
     }
 
 //2021-02-25 willa.liu@fibocom.com changed begin for support eipd SN-20210129001

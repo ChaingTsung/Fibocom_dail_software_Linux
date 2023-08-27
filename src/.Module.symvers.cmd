@@ -1,0 +1,1 @@
+cmd_/home/yoki/fibocom_dial/src/Module.symvers := sed 's/\.ko$$/\.o/' /home/yoki/fibocom_dial/src/modules.order | scripts/mod/modpost -m -a  -o /home/yoki/fibocom_dial/src/Module.symvers -e -i Module.symvers   -T -

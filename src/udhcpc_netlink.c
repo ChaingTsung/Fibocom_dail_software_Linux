@@ -150,8 +150,12 @@ void udhcpc_start(PROFILE_T *profile)
                        ntohl(profile->ipv4.DnsPrimary),
                        ntohl(profile->ipv4.DnsSecondary));
     }
+    else
+    {
+        dbg_time("The IPv4 Address in profile is NULL");
+    }
 
-    if (profile->ipv6.Address[0] && profile->ipv6.PrefixLengthIPAddr)
+    if (profile->ipv6.Address && (profile->ipv6.PrefixLengthIPAddr != 0))
     {
         //module do not support DHCPv6, only support 'Router Solicit'
         //and it seem if enable /proc/sys/net/ipv6/conf/all/forwarding, Kernel do not send RS
@@ -170,12 +174,16 @@ void udhcpc_start(PROFILE_T *profile)
 
         dbg_time("IPv6 MTU: %d", profile->ipv6.Mtu);
         dbg_time("IPv6 Address: %s", ipaddr_to_string_v6(profile->ipv6.Address));
-        dbg_time("IPv6 Netmask: %d", profile->ipv6.PrefixLengthIPAddr);
+        dbg_time("IPv6 PrefixLengthIPAddr: %d", profile->ipv6.PrefixLengthIPAddr);
         dbg_time("IPv6 Gateway: %s", ipaddr_to_string_v6(profile->ipv6.Gateway));
         dbg_time("IPv6 DNS1: %s", ipaddr_to_string_v6(profile->ipv6.DnsPrimary));
         dbg_time("IPv6 DNS2: %s", ipaddr_to_string_v6(profile->ipv6.DnsSecondary));
         if_set_network_v6(ifname, profile->ipv6.Address, profile->ipv6.PrefixLengthIPAddr,
                        profile->ipv6.Gateway, profile->ipv6.DnsPrimary, profile->ipv6.DnsSecondary);
+    }
+    else
+    {
+        dbg_time("The IPv6 Address in profile is NULL");
     }
 }
 
